@@ -76,6 +76,9 @@ export default function RestaurantPage() {
     const now = new Date();
     const action = event.action as string;
 
+    // Skip if no significant action
+    if (!action || action === "NONE") return;
+
     // Add AI action log
     setAiActions((prev) => [
       ...prev,
@@ -111,7 +114,7 @@ export default function RestaurantPage() {
         if (updated.length > 0) {
           updated[updated.length - 1] = {
             ...updated[updated.length - 1],
-            time: (event.newTime as string) || updated[updated.length - 1].time,
+            time: (event.time as string) || updated[updated.length - 1].time,
             status: "modified",
           };
         }
@@ -123,7 +126,7 @@ export default function RestaurantPage() {
         {
           id: crypto.randomUUID(),
           type: "modification",
-          text: `📝 Booking updated!\n\nNew time: ${event.newTime || "8:00 PM"}\n\nWe look forward to seeing you!`,
+          text: `📝 Booking updated!\n\nNew time: ${event.time || "Updated"}\n\nWe look forward to seeing you!`,
           timestamp: now,
         },
       ]);
@@ -153,9 +156,10 @@ export default function RestaurantPage() {
     }
 
     if (action === "TAKEAWAY_ORDER_PLACED") {
+      const items = (event.items as string[]) || ["Your order"];
       const order: TakeawayOrder = {
         id: crypto.randomUUID(),
-        items: (event.items as string[]) || ["Order items"],
+        items,
         pickupTime: (event.pickupTime as string) || "20 mins",
         status: "new",
         timestamp: now,
@@ -167,24 +171,10 @@ export default function RestaurantPage() {
         {
           id: crypto.randomUUID(),
           type: "takeaway",
-          text: `🥡 Order confirmed!\n\n${order.items.join(", ")}\n\n⏱️ Ready in: ${order.pickupTime}\n\nThe Golden Fork`,
+          text: `🥡 Order confirmed!\n\n${items.join(", ")}\n\n⏱️ Ready in: ${order.pickupTime}\n\nThe Golden Fork`,
           timestamp: now,
         },
       ]);
-    }
-
-    if (action === "TAKEAWAY_ITEM_ADDED") {
-      setTakeawayOrders((prev) => {
-        const updated = [...prev];
-        if (updated.length > 0) {
-          const newItems = (event.items as string[]) || [];
-          updated[updated.length - 1] = {
-            ...updated[updated.length - 1],
-            items: [...updated[updated.length - 1].items, ...newItems],
-          };
-        }
-        return updated;
-      });
     }
   }, []);
 
