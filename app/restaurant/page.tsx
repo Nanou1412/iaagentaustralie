@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
-import { RotateCcw, Volume2, VolumeX, Loader2 } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   HeroSection,
@@ -111,32 +111,53 @@ export default function RestaurantPage() {
     document.getElementById("activate")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Stop current audio playback
+  // Audio queue to prevent overlapping
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingRef = useRef(false);
+
+  // Stop current audio playback completely
   const stopSpeaking = useCallback(() => {
+    // Clear the queue
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.onplay = null;
+      audioRef.current = null;
     }
+    
+    // Cleanup URL
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    
     setIsSpeaking(false);
+    setIsLoadingAudio(false);
   }, []);
 
-  // Speak with OpenAI TTS - improved with cleanup, retry, and state management
+  // Speak with OpenAI TTS - FIXED to not interrupt, uses queue
   const speakText = useCallback(async (text: string) => {
     if (!text.trim()) return;
     
+    // CRITICAL: Stop any current audio BEFORE starting new one
+    // This prevents Emma from "cutting herself off"
+    stopSpeaking();
+    
+    // Small delay to ensure audio cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    if (!isMountedRef.current) return;
+    
     setIsLoadingAudio(true);
     setError(null);
+    isPlayingRef.current = true;
     
     try {
-      // Stop any current audio
-      stopSpeaking();
-      
-      // Cleanup previous URL
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-        audioUrlRef.current = null;
-      }
-      
       const response = await fetchWithRetry("/.netlify/functions/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -147,10 +168,17 @@ export default function RestaurantPage() {
         throw new Error(`TTS failed: ${response.status}`);
       }
       
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || !isPlayingRef.current) return;
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
+      
+      // Double-check we should still play
+      if (!isMountedRef.current || !isPlayingRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      
       audioUrlRef.current = url;
       
       const audio = new Audio(url);
@@ -166,6 +194,7 @@ export default function RestaurantPage() {
       audio.onended = () => {
         if (isMountedRef.current) {
           setIsSpeaking(false);
+          isPlayingRef.current = false;
         }
       };
       
@@ -173,7 +202,7 @@ export default function RestaurantPage() {
         if (isMountedRef.current) {
           setIsSpeaking(false);
           setIsLoadingAudio(false);
-          setError("Audio playback failed");
+          isPlayingRef.current = false;
         }
       };
       
@@ -183,7 +212,7 @@ export default function RestaurantPage() {
       if (isMountedRef.current) {
         setIsLoadingAudio(false);
         setIsSpeaking(false);
-        // Silent fail for TTS - don't block the conversation
+        isPlayingRef.current = false;
       }
     }
   }, [stopSpeaking]);
@@ -452,47 +481,16 @@ export default function RestaurantPage() {
           messages={messages}
           isLoading={isLoading}
           onSendMessage={handleSendMessage}
+          isSpeaking={isSpeaking || isLoadingAudio}
+          onStopSpeaking={stopSpeaking}
         />
       </div>
 
       {/* Guided Scenarios */}
       <GuidedScenarios onSelect={handleSendMessage} disabled={isLoading} />
 
-      {/* Control Buttons */}
+      {/* Simple Reset Button */}
       <div className="flex justify-center gap-4 pb-8" role="group" aria-label="Demo controls">
-        {/* Audio control button */}
-        {(isSpeaking || isLoadingAudio) && (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={stopSpeaking} 
-            className="gap-2"
-            aria-label={isLoadingAudio ? "Loading Emma's voice" : "Stop Emma speaking"}
-            disabled={isLoadingAudio}
-          >
-            {isLoadingAudio ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                Loading voice...
-              </>
-            ) : (
-              <>
-                <VolumeX className="w-4 h-4" aria-hidden="true" />
-                Stop voice
-              </>
-            )}
-          </Button>
-        )}
-        
-        {/* Speaking indicator */}
-        {isSpeaking && !isLoadingAudio && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30" aria-live="polite">
-            <Volume2 className="w-4 h-4 text-blue-400 animate-pulse" aria-hidden="true" />
-            <span className="text-sm text-blue-400">Emma is speaking...</span>
-          </div>
-        )}
-        
-        {/* Reset button */}
         <Button 
           variant="outline" 
           size="sm" 

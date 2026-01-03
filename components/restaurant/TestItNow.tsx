@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Mic, MicOff, MessageSquare, Send, Loader2, Volume2 } from "lucide-react";
+import { Mic, MicOff, MessageSquare, Send, Loader2, Volume2, Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { checkSpeechSupport, getSpeechRecognition } from "@/lib/speech";
@@ -19,16 +18,17 @@ interface TestItNowProps {
   messages: Message[];
   isLoading: boolean;
   onSendMessage: (text: string) => void;
+  isSpeaking?: boolean;
+  onStopSpeaking?: () => void;
 }
 
-export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps) {
+export function TestItNow({ messages, isLoading, onSendMessage, isSpeaking, onStopSpeaking }: TestItNowProps) {
   const [mode, setMode] = useState<"voice" | "chat">("voice");
   const [hasVoiceSupport, setHasVoiceSupport] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [inputValue, setInputValue] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const voiceContainerRef = useRef<HTMLDivElement>(null);
 
@@ -38,9 +38,8 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
     if (!support.recognition) setMode("chat");
   }, []);
 
-  // Scroll to bottom ONLY within the messages container (not the page)
+  // Scroll to bottom ONLY within the messages container
   useEffect(() => {
-    // Use requestAnimationFrame to ensure DOM is updated
     requestAnimationFrame(() => {
       if (mode === "chat" && chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -50,8 +49,15 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
     });
   }, [messages, mode]);
 
+  // Stop listening when Emma starts speaking (prevent interruption)
+  useEffect(() => {
+    if (isSpeaking && isListening) {
+      stopListening();
+    }
+  }, [isSpeaking]);
+
   const startListening = useCallback(() => {
-    if (!hasVoiceSupport) return;
+    if (!hasVoiceSupport || isSpeaking) return;
 
     const recognition = getSpeechRecognition();
     if (!recognition) return;
@@ -82,7 +88,7 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
     recognition.onerror = () => setIsListening(false);
 
     recognition.start();
-  }, [hasVoiceSupport, onSendMessage]);
+  }, [hasVoiceSupport, onSendMessage, isSpeaking]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -96,181 +102,212 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
     setInputValue("");
   };
 
-  return (
-    <section id="demo" className="py-16 px-4">
-      <div className="max-w-3xl mx-auto">
-        <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
-          Test it now
-        </h2>
-        <p className="text-muted-foreground text-center mb-8 max-w-xl mx-auto">
-          Talk to Emma as if you're calling The Golden Fork restaurant.
-        </p>
+  const hasStarted = messages.length > 0;
 
-        <Card className="overflow-hidden border-orange-500/20">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 p-4 border-b border-orange-500/20">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-xl">
-                👋
+  return (
+    <section id="demo" className="py-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Simplified Header */}
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold mb-2">
+            🍽️ Call The Golden Fork
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Talk to Emma - she can book tables, take orders, or answer questions
+          </p>
+        </div>
+
+        <Card className="overflow-hidden border-orange-500/30 shadow-xl shadow-orange-500/5">
+          {/* Phone-style Header */}
+          <div className="bg-gradient-to-r from-orange-600 to-red-600 p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="font-medium">The Golden Fork</p>
+                  <p className="text-xs text-white/70">
+                    {hasStarted ? (isSpeaking ? "Emma is speaking..." : isListening ? "Listening..." : "Connected") : "Tap to call"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-semibold">Emma</p>
-                <p className="text-sm text-muted-foreground">AI Assistant • The Golden Fork</p>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-xs text-green-400">Online</span>
-              </div>
+              
+              {/* Mode Toggle - only show after started */}
+              {hasStarted && (
+                <div className="flex gap-1 bg-white/10 rounded-lg p-1">
+                  <button
+                    onClick={() => setMode("voice")}
+                    disabled={!hasVoiceSupport}
+                    className={cn(
+                      "p-2 rounded-md transition-colors",
+                      mode === "voice" ? "bg-white text-orange-600" : "text-white/70 hover:text-white"
+                    )}
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setMode("chat")}
+                    className={cn(
+                      "p-2 rounded-md transition-colors",
+                      mode === "chat" ? "bg-white text-orange-600" : "text-white/70 hover:text-white"
+                    )}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Tabs */}
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "voice" | "chat")} className="w-full">
-            <div className="px-4 pt-4">
-              <TabsList className="grid w-full grid-cols-2 max-w-xs mx-auto">
-                <TabsTrigger value="voice" disabled={!hasVoiceSupport} className="gap-2">
-                  <Mic className="w-4 h-4" />
-                  Voice
-                </TabsTrigger>
-                <TabsTrigger value="chat" className="gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  Chat
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            {/* Voice Mode */}
-            <TabsContent value="voice" className="p-6">
-              <div className="text-center space-y-6">
-                {/* Microphone Button */}
-                <div className="relative inline-flex">
-                  {isListening && (
-                    <>
-                      <div className="absolute inset-0 w-24 h-24 -m-4 rounded-full bg-orange-500/20 animate-ping" />
-                      <div className="absolute inset-0 w-20 h-20 -m-2 rounded-full bg-orange-500/10 animate-pulse" />
-                    </>
-                  )}
-                  <Button
-                    size="lg"
-                    onClick={isListening ? stopListening : startListening}
-                    disabled={isLoading}
-                    className={cn(
-                      "w-16 h-16 rounded-full relative z-10 transition-all",
-                      isListening
-                        ? "bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30"
-                        : "bg-gradient-to-br from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/30"
-                    )}
-                  >
-                    {isListening ? (
-                      <MicOff className="w-6 h-6" />
-                    ) : (
-                      <Mic className="w-6 h-6" />
-                    )}
-                  </Button>
+          {/* Messages Area */}
+          <div 
+            ref={mode === "voice" ? voiceContainerRef : chatContainerRef}
+            className="h-[300px] overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-background to-muted/20"
+          >
+            {!hasStarted && (
+              <div className="h-full flex flex-col items-center justify-center text-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Phone className="w-8 h-8 text-orange-500" />
                 </div>
-
-                <p className="text-sm text-muted-foreground">
-                  {isListening ? "Listening... Speak now" : "Tap to start speaking"}
-                </p>
-
-                {transcript && (
-                  <p className="text-sm italic text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
-                    {transcript}
+                <div>
+                  <p className="font-medium text-lg">Ready to call?</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Click the button below to start
                   </p>
-                )}
+                </div>
+              </div>
+            )}
+            
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            
+            {isLoading && <TypingIndicator />}
+          </div>
 
-                {/* Voice Messages */}
-                {messages.length > 0 && (
-                  <div 
-                    ref={voiceContainerRef}
-                    className="mt-6 space-y-3 text-left max-w-md mx-auto max-h-[250px] overflow-y-auto"
+          {/* Input Area */}
+          <div className="border-t bg-muted/30 p-4">
+            {mode === "voice" ? (
+              <div className="flex items-center justify-center gap-4">
+                {/* Main Voice Button */}
+                <Button
+                  size="lg"
+                  onClick={isListening ? stopListening : startListening}
+                  disabled={isLoading || isSpeaking}
+                  className={cn(
+                    "w-14 h-14 rounded-full transition-all",
+                    isListening
+                      ? "bg-red-500 hover:bg-red-600 animate-pulse"
+                      : "bg-gradient-to-br from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                  )}
+                >
+                  {isListening ? (
+                    <MicOff className="w-6 h-6" />
+                  ) : (
+                    <Mic className="w-6 h-6" />
+                  )}
+                </Button>
+                
+                {/* Stop Emma Button */}
+                {isSpeaking && onStopSpeaking && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onStopSpeaking}
+                    className="gap-2"
                   >
-                    {messages.slice(-4).map((m) => (
-                      <VoiceMessageBubble key={m.id} message={m} />
-                    ))}
-                    {isLoading && <TypingIndicator />}
+                    <PhoneOff className="w-4 h-4" />
+                    Stop
+                  </Button>
+                )}
+                
+                {/* Transcript preview */}
+                {transcript && (
+                  <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur rounded-lg px-4 py-2 shadow-lg">
+                    <p className="text-sm italic">{transcript}</p>
                   </div>
                 )}
               </div>
-            </TabsContent>
-
-            {/* Chat Mode */}
-            <TabsContent value="chat" className="p-0">
-              {/* Messages */}
-              <div 
-                ref={chatContainerRef}
-                className="h-[350px] overflow-y-auto p-4 space-y-3 scroll-smooth"
-              >
-                {messages.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">
-                    Start a conversation...
-                  </p>
-                )}
-                {messages.map((m) => (
-                  <ChatMessageBubble key={m.id} message={m} />
-                ))}
-                {isLoading && <TypingIndicator />}
-              </div>
-
-              {/* Input */}
-              <form onSubmit={handleChatSubmit} className="border-t p-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type as if calling the restaurant..."
-                    disabled={isLoading}
-                    className="flex-1"
-                  />
-                  <Button type="submit" disabled={isLoading || !inputValue.trim()}>
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
+            ) : (
+              <form onSubmit={handleChatSubmit} className="flex gap-2">
+                <Input
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Type your message..."
+                  disabled={isLoading}
+                  className="flex-1"
+                />
+                <Button type="submit" disabled={isLoading || !inputValue.trim()}>
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
               </form>
-            </TabsContent>
-          </Tabs>
+            )}
+            
+            {/* Status indicator */}
+            <p className="text-center text-xs text-muted-foreground mt-2">
+              {isSpeaking ? (
+                <span className="flex items-center justify-center gap-1">
+                  <Volume2 className="w-3 h-3 animate-pulse" />
+                  Emma is speaking...
+                </span>
+              ) : isListening ? (
+                "Listening... speak now"
+              ) : mode === "voice" ? (
+                "Tap mic to speak"
+              ) : (
+                "Type and press Enter"
+              )}
+            </p>
+          </div>
         </Card>
+
+        {/* Quick Actions - Only show when conversation started */}
+        {hasStarted && (
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <QuickAction onClick={() => onSendMessage("Book a table for tonight")} disabled={isLoading}>
+              📅 Book table
+            </QuickAction>
+            <QuickAction onClick={() => onSendMessage("I'd like to order takeaway")} disabled={isLoading}>
+              🥡 Takeaway
+            </QuickAction>
+            <QuickAction onClick={() => onSendMessage("What's popular?")} disabled={isLoading}>
+              ⭐ Popular
+            </QuickAction>
+            <QuickAction onClick={() => onSendMessage("Do you have vegetarian options?")} disabled={isLoading}>
+              🥬 Veggie
+            </QuickAction>
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-function VoiceMessageBubble({ message }: { message: Message }) {
+function QuickAction({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: React.ReactNode }) {
   return (
-    <div className={cn(
-      "flex",
-      message.role === "user" ? "justify-end" : "justify-start"
-    )}>
-      <div className={cn(
-        "max-w-[85%] rounded-2xl px-4 py-3",
-        message.role === "user"
-          ? "bg-orange-500/20 text-orange-100"
-          : "bg-muted"
-      )}>
-        <p className="text-sm">{message.content}</p>
-        {message.role === "assistant" && (
-          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-            <Volume2 className="w-3 h-3" />
-            <span>Audio played</span>
-          </div>
-        )}
-      </div>
-    </div>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="px-3 py-1.5 text-sm rounded-full border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 transition-colors disabled:opacity-50"
+    >
+      {children}
+    </button>
   );
 }
 
-function ChatMessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message }: { message: Message }) {
   return (
     <div className={cn(
       "flex",
       message.role === "user" ? "justify-end" : "justify-start"
     )}>
       <div className={cn(
-        "max-w-[80%] rounded-2xl px-4 py-3 shadow-sm",
+        "max-w-[85%] rounded-2xl px-4 py-2.5",
         message.role === "user"
           ? "bg-gradient-to-r from-orange-500 to-red-500 text-white"
           : "bg-muted border border-border"
@@ -284,11 +321,11 @@ function ChatMessageBubble({ message }: { message: Message }) {
 function TypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="bg-muted rounded-2xl px-4 py-3">
+      <div className="bg-muted rounded-2xl px-4 py-3 border border-border">
         <div className="flex gap-1">
-          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "0ms" }} />
-          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "150ms" }} />
-          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "300ms" }} />
+          <span className="w-2 h-2 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-2 h-2 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-2 h-2 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
       </div>
     </div>
