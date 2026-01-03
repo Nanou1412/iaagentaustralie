@@ -76,8 +76,8 @@ export default function RestaurantPage() {
     const now = new Date();
     const action = event.action as string;
 
-    // Skip if no significant action
-    if (!action || action === "NONE") return;
+    // Skip if no significant action (NONE = still gathering info, WAITING = side conversation)
+    if (!action || action === "NONE" || action === "WAITING") return;
 
     // Add AI action log
     setAiActions((prev) => [
@@ -203,18 +203,21 @@ export default function RestaurantPage() {
 
       const data = await response.json();
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.assistantMessage,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      // Only add message if Emma actually responds (not silent during side conversations)
+      if (data.assistantMessage && data.assistantMessage.trim()) {
+        const assistantMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.assistantMessage,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        // Speak response only if there's something to say
+        speakText(data.assistantMessage);
+      }
 
       // Process event
       processEvent(data.event);
-
-      // Speak response
-      speakText(data.assistantMessage);
     } catch (error) {
       console.error("AI error:", error);
       const errorMessage: Message = {
