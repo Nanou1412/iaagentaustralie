@@ -29,6 +29,8 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
   const [inputValue, setInputValue] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const voiceContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const support = checkSpeechSupport();
@@ -36,9 +38,17 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
     if (!support.recognition) setMode("chat");
   }, []);
 
+  // Scroll to bottom ONLY within the messages container (not the page)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    // Use requestAnimationFrame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      if (mode === "chat" && chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      } else if (mode === "voice" && voiceContainerRef.current) {
+        voiceContainerRef.current.scrollTop = voiceContainerRef.current.scrollHeight;
+      }
+    });
+  }, [messages, mode]);
 
   const startListening = useCallback(() => {
     if (!hasVoiceSupport) return;
@@ -171,12 +181,14 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
 
                 {/* Voice Messages */}
                 {messages.length > 0 && (
-                  <div className="mt-6 space-y-3 text-left max-w-md mx-auto">
+                  <div 
+                    ref={voiceContainerRef}
+                    className="mt-6 space-y-3 text-left max-w-md mx-auto max-h-[250px] overflow-y-auto"
+                  >
                     {messages.slice(-4).map((m) => (
                       <VoiceMessageBubble key={m.id} message={m} />
                     ))}
                     {isLoading && <TypingIndicator />}
-                    <div ref={messagesEndRef} />
                   </div>
                 )}
               </div>
@@ -185,7 +197,10 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
             {/* Chat Mode */}
             <TabsContent value="chat" className="p-0">
               {/* Messages */}
-              <div className="h-[350px] overflow-y-auto p-4 space-y-3">
+              <div 
+                ref={chatContainerRef}
+                className="h-[350px] overflow-y-auto p-4 space-y-3 scroll-smooth"
+              >
                 {messages.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">
                     Start a conversation...
@@ -195,7 +210,6 @@ export function TestItNow({ messages, isLoading, onSendMessage }: TestItNowProps
                   <ChatMessageBubble key={m.id} message={m} />
                 ))}
                 {isLoading && <TypingIndicator />}
-                <div ref={messagesEndRef} />
               </div>
 
               {/* Input */}

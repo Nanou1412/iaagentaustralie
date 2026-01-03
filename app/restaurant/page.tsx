@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { useCallback, useRef, useState, useEffect } from "react";
+import { RotateCcw, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   HeroSection,
@@ -18,6 +18,45 @@ import {
   AIAction,
 } from "@/components/restaurant";
 
+// Retry configuration
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000;
+const FETCH_TIMEOUT = 15000; // 15 seconds
+
+// Fetch with timeout helper
+async function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+// Retry helper with exponential backoff
+async function fetchWithRetry(
+  url: string, 
+  options: RequestInit, 
+  retries: number = MAX_RETRIES
+): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const response = await fetchWithTimeout(url, options, FETCH_TIMEOUT);
+      if (response.ok || response.status < 500) return response;
+      throw new Error(`Server error: ${response.status}`);
+    } catch (error) {
+      if (i === retries) throw error;
+      await new Promise(r => setTimeout(r, RETRY_DELAY * (i + 1)));
+    }
+  }
+  throw new Error("Max retries reached");
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -33,8 +72,38 @@ export default function RestaurantPage() {
   const [takeawayOrders, setTakeawayOrders] = useState<TakeawayOrder[]>([]);
   const [aiActions, setAiActions] = useState<AIAction[]>([]);
   
+  // Audio state
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   const demoRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Cleanup on unmount - prevents memory leaks
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+      
+      // Cleanup audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.onended = null;
+        audioRef.current.onerror = null;
+        audioRef.current.onplay = null;
+      }
+      
+      // Cleanup URL to prevent memory leaks
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const scrollToDemo = () => {
     demoRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,30 +113,82 @@ export default function RestaurantPage() {
     document.getElementById("activate")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Speak with OpenAI TTS
+  // Stop current audio playback
+  const stopSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsSpeaking(false);
+  }, []);
+
+  // Speak with OpenAI TTS - improved with cleanup, retry, and state management
   const speakText = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    
+    setIsLoadingAudio(true);
+    setError(null);
+    
     try {
-      const response = await fetch("/.netlify/functions/tts", {
+      // Stop any current audio
+      stopSpeaking();
+      
+      // Cleanup previous URL
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+      
+      const response = await fetchWithRetry("/.netlify/functions/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!response.ok) return;
+      
+      if (!response.ok) {
+        throw new Error(`TTS failed: ${response.status}`);
+      }
+      
+      if (!isMountedRef.current) return;
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      audioUrlRef.current = url;
       
       const audio = new Audio(url);
       audioRef.current = audio;
+      
+      audio.onplay = () => {
+        if (isMountedRef.current) {
+          setIsLoadingAudio(false);
+          setIsSpeaking(true);
+        }
+      };
+      
+      audio.onended = () => {
+        if (isMountedRef.current) {
+          setIsSpeaking(false);
+        }
+      };
+      
+      audio.onerror = () => {
+        if (isMountedRef.current) {
+          setIsSpeaking(false);
+          setIsLoadingAudio(false);
+          setError("Audio playback failed");
+        }
+      };
+      
       await audio.play();
-    } catch (error) {
-      console.error("TTS error:", error);
+    } catch (err) {
+      console.error("TTS error:", err);
+      if (isMountedRef.current) {
+        setIsLoadingAudio(false);
+        setIsSpeaking(false);
+        // Silent fail for TTS - don't block the conversation
+      }
     }
-  }, []);
+  }, [stopSpeaking]);
 
   // Process AI response event
   const processEvent = useCallback((event: Record<string, unknown> | null) => {
@@ -178,7 +299,7 @@ export default function RestaurantPage() {
     }
   }, []);
 
-  // Send message to AI
+  // Send message to AI - improved with retry, timeout, and better error handling
   const handleSendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
 
@@ -189,9 +310,10 @@ export default function RestaurantPage() {
     };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    setError(null);
 
     try {
-      const response = await fetch("/.netlify/functions/ai", {
+      const response = await fetchWithRetry("/.netlify/functions/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -200,6 +322,11 @@ export default function RestaurantPage() {
           industry: "restaurants",
         }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -218,12 +345,29 @@ export default function RestaurantPage() {
 
       // Process event
       processEvent(data.event);
-    } catch (error) {
-      console.error("AI error:", error);
+    } catch (err) {
+      console.error("AI error:", err);
+      
+      // Determine error type for appropriate message
+      let errorContent = "Oh sorry, I didn't quite catch that! Could you say that again?";
+      
+      if (err instanceof Error) {
+        if (err.name === "AbortError" || err.message.includes("timeout")) {
+          errorContent = "Sorry, that took a bit too long! Let me try again - what were you saying?";
+          setError("Connection timeout - please try again");
+        } else if (err.message.includes("network") || err.message.includes("fetch")) {
+          errorContent = "Hmm, seems like we have a connection issue. Give me a sec and try again?";
+          setError("Network error - check your connection");
+        } else if (err.message.includes("Rate limit")) {
+          errorContent = "Whoa, lots of questions! Give me just a moment to catch up.";
+          setError("Too many requests - please wait a moment");
+        }
+      }
+      
       const errorMessage: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "Oh sorry, I didn't quite catch that! Could you say that again?",
+        content: errorContent,
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -231,17 +375,29 @@ export default function RestaurantPage() {
     }
   }, [messages, isLoading, processEvent, speakText]);
 
-  // Reset demo
-  const resetDemo = () => {
+  // Reset demo - cleanup everything including audio
+  const resetDemo = useCallback(() => {
     setMessages([]);
     setSmsMessages([]);
     setReservations([]);
     setTakeawayOrders([]);
     setAiActions([]);
+    setError(null);
+    setIsSpeaking(false);
+    setIsLoadingAudio(false);
+    
+    // Cleanup audio
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
-  };
+    
+    // Cleanup URL
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -263,13 +419,61 @@ export default function RestaurantPage() {
       {/* Guided Scenarios */}
       <GuidedScenarios onSelect={handleSendMessage} disabled={isLoading} />
 
-      {/* Reset Button */}
-      <div className="flex justify-center pb-8">
-        <Button variant="outline" size="sm" onClick={resetDemo} className="gap-2">
-          <RotateCcw className="w-4 h-4" />
+      {/* Control Buttons */}
+      <div className="flex justify-center gap-4 pb-8" role="group" aria-label="Demo controls">
+        {/* Audio control button */}
+        {(isSpeaking || isLoadingAudio) && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={stopSpeaking} 
+            className="gap-2"
+            aria-label={isLoadingAudio ? "Loading Emma's voice" : "Stop Emma speaking"}
+            disabled={isLoadingAudio}
+          >
+            {isLoadingAudio ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                Loading voice...
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-4 h-4" aria-hidden="true" />
+                Stop voice
+              </>
+            )}
+          </Button>
+        )}
+        
+        {/* Speaking indicator */}
+        {isSpeaking && !isLoadingAudio && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30" aria-live="polite">
+            <Volume2 className="w-4 h-4 text-blue-400 animate-pulse" aria-hidden="true" />
+            <span className="text-sm text-blue-400">Emma is speaking...</span>
+          </div>
+        )}
+        
+        {/* Reset button */}
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={resetDemo} 
+          className="gap-2"
+          aria-label="Reset the demo conversation"
+        >
+          <RotateCcw className="w-4 h-4" aria-hidden="true" />
           Reset demo
         </Button>
       </div>
+      
+      {/* Error display */}
+      {error && (
+        <div className="flex justify-center pb-4">
+          <p className="text-sm text-red-400 bg-red-500/10 px-4 py-2 rounded-lg" role="alert">
+            {error}
+          </p>
+        </div>
+      )}
 
       {/* Live Previews */}
       <div className="py-8 bg-gradient-to-b from-muted/20 to-transparent">
