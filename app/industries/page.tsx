@@ -66,56 +66,73 @@ export default function IndustriesPage() {
 
         {/* Industry cards */}
         <div className="grid md:grid-cols-2 gap-6">
-          {industries.map((industry, index) => (
-            <Card
-              key={industry.slug}
-              className={`relative transition-all duration-300 animate-fade-in group ${
-                industry.available
-                  ? "hover:scale-[1.02] hover:border-blue-500/30 cursor-pointer"
-                  : "opacity-50"
-              }`}
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              {industry.available && (
-                <div className={`absolute inset-0 rounded-xl bg-gradient-to-br ${getIndustryGradient(industry.slug)} opacity-0 group-hover:opacity-5 transition-opacity`} />
-              )}
-              
-              <CardHeader className="relative">
-                <div className="flex items-start justify-between">
-                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${getIndustryGradient(industry.slug)} p-[1px]`}>
-                    <div className="w-full h-full rounded-xl bg-background flex items-center justify-center text-foreground">
-                      {getIndustryIcon(industry.icon)}
+          {industries.map((industry, index) => {
+            const href = industry.slug === "restaurants" ? "/restaurant" : `/industry/${industry.slug}`;
+            
+            return industry.available ? (
+              <a
+                key={industry.slug}
+                href={href}
+                className="block"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <Card
+                  className="relative transition-all duration-300 animate-fade-in group hover:scale-[1.02] hover:border-blue-500/30 cursor-pointer h-full"
+                >
+                  <div className={`absolute inset-0 rounded-xl bg-gradient-to-br ${getIndustryGradient(industry.slug)} opacity-0 group-hover:opacity-5 transition-opacity`} />
+                  
+                  <CardHeader className="relative">
+                    <div className="flex items-start justify-between">
+                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${getIndustryGradient(industry.slug)} p-[1px]`}>
+                        <div className="w-full h-full rounded-xl bg-background flex items-center justify-center text-foreground">
+                          {getIndustryIcon(industry.icon)}
+                        </div>
+                      </div>
+                      <Badge className="bg-green-500/10 text-green-400 border-green-500/20">Available</Badge>
                     </div>
-                  </div>
-                  {!industry.available && (
-                    <Badge variant="secondary" className="bg-white/5">Coming soon</Badge>
-                  )}
-                  {industry.available && (
-                    <Badge className="bg-green-500/10 text-green-400 border-green-500/20">Available</Badge>
-                  )}
-                </div>
-                <CardTitle className="mt-4 text-xl">{industry.name}</CardTitle>
-                <CardDescription className="text-base text-muted-foreground">
-                  {industry.description}
-                </CardDescription>
-              </CardHeader>
+                    <CardTitle className="mt-4 text-xl">{industry.name}</CardTitle>
+                    <CardDescription className="text-base text-muted-foreground">
+                      {industry.description}
+                    </CardDescription>
+                  </CardHeader>
 
-              <CardFooter>
-                {industry.available ? (
-                  <Button asChild className="w-full gap-2 group-hover:glow-blue">
-                    <a href={industry.slug === "restaurants" ? "/restaurant" : `/industry/${industry.slug}`}>
+                  <CardFooter>
+                    <Button className="w-full gap-2 group-hover:glow-blue">
                       Talk to Emma
                       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                    </a>
-                  </Button>
-                ) : (
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </a>
+            ) : (
+              <Card
+                key={industry.slug}
+                className="relative transition-all duration-300 animate-fade-in opacity-50"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <CardHeader className="relative">
+                  <div className="flex items-start justify-between">
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${getIndustryGradient(industry.slug)} p-[1px]`}>
+                      <div className="w-full h-full rounded-xl bg-background flex items-center justify-center text-foreground">
+                        {getIndustryIcon(industry.icon)}
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="bg-white/5">Coming soon</Badge>
+                  </div>
+                  <CardTitle className="mt-4 text-xl">{industry.name}</CardTitle>
+                  <CardDescription className="text-base text-muted-foreground">
+                    {industry.description}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardFooter>
                   <Button disabled variant="outline" className="w-full opacity-50">
                     Coming soon
                   </Button>
-                )}
-              </CardFooter>
-            </Card>
-          ))}
+                </CardFooter>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Back link */}
