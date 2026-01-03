@@ -16,6 +16,7 @@ import {
   Reservation,
   TakeawayOrder,
   AIAction,
+  RestaurantDataPreview,
 } from "@/components/restaurant";
 
 // Retry configuration
@@ -76,6 +77,7 @@ export default function RestaurantPage() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasGreeted, setHasGreeted] = useState(false);
   
   const demoRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -104,10 +106,6 @@ export default function RestaurantPage() {
       }
     };
   }, []);
-
-  const scrollToDemo = () => {
-    demoRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
 
   const scrollToActivate = () => {
     document.getElementById("activate")?.scrollIntoView({ behavior: "smooth" });
@@ -189,6 +187,43 @@ export default function RestaurantPage() {
       }
     }
   }, [stopSpeaking]);
+
+  // Emma's greeting message
+  const EMMA_GREETING = "Hey! Thanks for calling The Golden Fork, this is Emma speaking. How can I help you today? I can help you book a table, order some takeaway, or answer any questions about our menu!";
+
+  // Auto-greet when demo is started (when scrolled to demo)
+  const startDemo = useCallback(() => {
+    if (hasGreeted) return;
+    
+    setHasGreeted(true);
+    
+    // Add Emma's greeting message
+    const greetingMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: EMMA_GREETING,
+    };
+    setMessages([greetingMessage]);
+    
+    // Speak the greeting
+    speakText(EMMA_GREETING);
+    
+    // Log action
+    setAiActions([{
+      id: crypto.randomUUID(),
+      action: "Call answered - Emma greeting",
+      timestamp: new Date(),
+    }]);
+  }, [hasGreeted, speakText]);
+
+  // Scroll to demo and start greeting
+  const scrollToDemo = useCallback(() => {
+    demoRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Start the demo with greeting after a short delay
+    setTimeout(() => {
+      startDemo();
+    }, 500);
+  }, [startDemo]);
 
   // Process AI response event
   const processEvent = useCallback((event: Record<string, unknown> | null) => {
@@ -385,6 +420,7 @@ export default function RestaurantPage() {
     setError(null);
     setIsSpeaking(false);
     setIsLoadingAudio(false);
+    setHasGreeted(false); // Allow greeting again
     
     // Cleanup audio
     if (audioRef.current) {
@@ -403,6 +439,9 @@ export default function RestaurantPage() {
     <div className="min-h-screen">
       {/* Hero */}
       <HeroSection onStartDemo={scrollToDemo} onActivate={scrollToActivate} />
+
+      {/* Emma's Database - Calendar & Menu */}
+      <RestaurantDataPreview />
 
       {/* Before/After */}
       <BeforeAfterTimeline />

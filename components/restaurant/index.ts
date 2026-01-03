@@ -8,3 +8,4 @@ export { DashboardPreview } from "./DashboardPreview";
 export type { Reservation, TakeawayOrder, AIAction } from "./DashboardPreview";
 export { TrustSection } from "./TrustSection";
 export { FinalCTA } from "./FinalCTA";
+export { RestaurantDataPreview } from "./RestaurantDataPreview";
