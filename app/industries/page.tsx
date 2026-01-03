@@ -103,7 +103,7 @@ export default function IndustriesPage() {
               <CardFooter>
                 {industry.available ? (
                   <Button asChild className="w-full gap-2 group-hover:glow-blue">
-                    <a href={`/industry/${industry.slug}`}>
+                    <a href={industry.slug === "restaurants" ? "/restaurant" : `/industry/${industry.slug}`}>
                       Talk to Emma
                       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                     </a>
