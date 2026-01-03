@@ -257,7 +257,3 @@ export default async function handler(req: Request, context: Context) {
     );
   }
 }
-
-export const config = {
-  path: "/api/ai",
-};

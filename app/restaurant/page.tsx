@@ -47,7 +47,7 @@ export default function RestaurantPage() {
   // Speak with OpenAI TTS
   const speakText = useCallback(async (text: string) => {
     try {
-      const response = await fetch("/api/tts", {
+      const response = await fetch("/.netlify/functions/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -201,12 +201,12 @@ export default function RestaurantPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/ai", {
+      const response = await fetch("/.netlify/functions/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          conversationHistory: messages.map((m) => `${m.role}: ${m.content}`).join("\n"),
+          conversationHistory: messages.map((m) => ({ role: m.role, content: m.content })),
           industry: "restaurants",
         }),
       });
