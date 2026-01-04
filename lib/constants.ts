@@ -24,8 +24,42 @@ export const AI_CONFIG = {
 
 export const PRICING = {
   setup: 390,
+  weekly: 69.9,
   currency: "AUD",
-  weeklyFee: "Starts once live",
+  setupDescription: "One-time setup & configuration",
+  weeklyDescription: "Ongoing AI phone service",
+  plans: {
+    setup_only: {
+      id: "setup_only",
+      name: "Setup Only",
+      description: "Get started with AI phone handling",
+      price: 390,
+      features: [
+        "Full AI agent configuration",
+        "Custom voice & personality",
+        "Integration with your systems",
+        "Training on your business",
+        "Pay weekly fee when ready to go live",
+      ],
+      popular: false,
+    },
+    setup_weekly: {
+      id: "setup_weekly",
+      name: "Setup + Go Live",
+      description: "Full setup and immediate activation",
+      price: 390,
+      weeklyPrice: 69.9,
+      features: [
+        "Everything in Setup Only",
+        "Immediate activation",
+        "24/7 AI call handling",
+        "SMS confirmations",
+        "Real-time dashboard",
+        "Cancel anytime",
+      ],
+      popular: true,
+    },
+  },
 };
 
 export const HOME_INTRO_TEXT = `Hi there. I'm Emma, and I'll be taking care of your calls. When you're busy with customers or it's after hours, I step in — answering inquiries, booking reservations, and making sure no one slips through the cracks. Think of me as your most reliable team member, always ready, always professional.`;

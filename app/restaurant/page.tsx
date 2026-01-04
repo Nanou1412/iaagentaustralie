@@ -529,7 +529,7 @@ export default function RestaurantPage() {
 
       {/* Final CTA */}
       <div id="activate">
-        <FinalCTA onActivate={() => alert("Payment integration placeholder.\n\nIn production, this would connect to your payment processor.")} />
+        <FinalCTA />
       </div>
 
       {/* Back link */}

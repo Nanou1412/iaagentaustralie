@@ -288,7 +288,7 @@ function RestaurantContent({ industry }: { industry: NonNullable<ReturnType<type
 
       {/* Section 6: CTA */}
       <section className="max-w-md mx-auto animate-fade-in" style={{ animationDelay: '0.4s' }}>
-        <CTABlock />
+        <CTABlock industry={industry.slug} />
       </section>
 
       {/* Back link */}
